@@ -74,7 +74,7 @@ export function createServer(config: Config, fetcher: typeof fetch = fetch): Mcp
   }, (filters) => toolResult(() => client.listProducts(filters)));
 
   server.registerTool('get_product', {
-    description: 'Cari satu produk berdasarkan kode dan ambil harga, biaya, dan tier sample_size (rendah: <50, sedang: 50?499, tinggi: >=500 transaksi final; null jika belum dihitung).',
+    description: 'Cari satu produk berdasarkan kode dan ambil harga, biaya, dan tier sample_size (rendah: <50, sedang: 50–499, tinggi: ≥500 transaksi final; null jika belum dihitung).',
     annotations: readOnly,
     inputSchema: { product_code: productCode },
   }, ({ product_code }) => toolResult(() => client.getProduct(product_code)));

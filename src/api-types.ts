@@ -428,15 +428,15 @@ export interface components {
             active: boolean;
             success_rate: number | null;
             speed_seconds: number | null;
-            /** @description Transaksi final: rendah <50, sedang 50?499, tinggi ?500; null jika belum dihitung. */
+            /** @description Transaksi final: rendah <50, sedang 50–499, tinggi ≥500; null jika belum dihitung. */
             sample_size: ("rendah" | "sedang" | "tinggi") | null;
             success_rate_30d: number | null;
             speed_seconds_30d: number | null;
-            /** @description Transaksi final: rendah <50, sedang 50?499, tinggi ?500; null jika belum dihitung. */
+            /** @description Transaksi final: rendah <50, sedang 50–499, tinggi ≥500; null jika belum dihitung. */
             sample_size_30d: ("rendah" | "sedang" | "tinggi") | null;
             success_rate_90d: number | null;
             speed_seconds_90d: number | null;
-            /** @description Transaksi final: rendah <50, sedang 50?499, tinggi ?500; null jika belum dihitung. */
+            /** @description Transaksi final: rendah <50, sedang 50–499, tinggi ≥500; null jika belum dihitung. */
             sample_size_90d: ("rendah" | "sedang" | "tinggi") | null;
         };
         CreateTransaction: {
@@ -461,11 +461,8 @@ export interface components {
             /** @enum {string} */
             status: "pending" | "success" | "failed";
             sn: string | null;
-            /**
-             * @description Hanya untuk tampilan; gunakan status untuk logika integrasi.
-             * @enum {string}
-             */
-            message: "Transaksi berhasil." | "Transaksi sedang diproses." | "Transaksi tidak dapat diproses. Dana dikembalikan." | "Transaksi dibatalkan. Dana dikembalikan ke saldo." | "Batas transaksi untuk tujuan ini telah tercapai." | "Nomor tujuan tidak valid. Periksa dan coba lagi." | "Produk sedang tidak tersedia. Silakan coba lagi nanti." | "Transaksi tidak dapat diproses.";
+            /** @description Hanya untuk tampilan; gunakan status untuk logika integrasi. Kemungkinan pesan: Transaksi berhasil.; Transaksi sedang diproses.; Transaksi tidak dapat diproses. Dana dikembalikan.; Batas transaksi untuk tujuan ini telah tercapai.; Nomor tujuan tidak valid. Periksa dan coba lagi.; Produk sedang tidak tersedia. Silakan coba lagi nanti.; Transaksi tidak dapat diproses. */
+            message: string;
             /** @enum {string} */
             product_type: "prepaid" | "postpaid";
             /** Format: date-time */
@@ -492,11 +489,8 @@ export interface components {
             /** @enum {string} */
             status: "pending" | "success" | "failed";
             sn: string | null;
-            /**
-             * @description Hanya untuk tampilan; gunakan status untuk logika integrasi.
-             * @enum {string}
-             */
-            message: "Transaksi berhasil." | "Transaksi sedang diproses." | "Transaksi tidak dapat diproses. Dana dikembalikan." | "Transaksi dibatalkan. Dana dikembalikan ke saldo." | "Batas transaksi untuk tujuan ini telah tercapai." | "Nomor tujuan tidak valid. Periksa dan coba lagi." | "Produk sedang tidak tersedia. Silakan coba lagi nanti." | "Transaksi tidak dapat diproses.";
+            /** @description Hanya untuk tampilan; gunakan status untuk logika integrasi. Kemungkinan pesan: Transaksi berhasil.; Transaksi sedang diproses.; Transaksi tidak dapat diproses. Dana dikembalikan.; Batas transaksi untuk tujuan ini telah tercapai.; Nomor tujuan tidak valid. Periksa dan coba lagi.; Produk sedang tidak tersedia. Silakan coba lagi nanti.; Transaksi tidak dapat diproses. */
+            message: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -1958,11 +1952,8 @@ export interface operations {
                         /** @enum {string} */
                         status: "pending" | "success" | "failed";
                         sn: string | null;
-                        /**
-                         * @description Hanya untuk tampilan; gunakan status untuk logika integrasi.
-                         * @enum {string}
-                         */
-                        message: "Transaksi berhasil." | "Transaksi sedang diproses." | "Transaksi tidak dapat diproses. Dana dikembalikan." | "Transaksi dibatalkan. Dana dikembalikan ke saldo." | "Batas transaksi untuk tujuan ini telah tercapai." | "Nomor tujuan tidak valid. Periksa dan coba lagi." | "Produk sedang tidak tersedia. Silakan coba lagi nanti." | "Transaksi tidak dapat diproses.";
+                        /** @description Hanya untuk tampilan; gunakan status untuk logika integrasi. Kemungkinan pesan: Transaksi berhasil.; Transaksi sedang diproses.; Transaksi tidak dapat diproses. Dana dikembalikan.; Batas transaksi untuk tujuan ini telah tercapai.; Nomor tujuan tidak valid. Periksa dan coba lagi.; Produk sedang tidak tersedia. Silakan coba lagi nanti.; Transaksi tidak dapat diproses. */
+                        message: string;
                     };
                 };
             };

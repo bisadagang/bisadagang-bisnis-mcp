@@ -92,6 +92,7 @@ test('MCP advertises read-only and destructive tools and serves docs without cre
     } else {
       assert.equal(tool.annotations.readOnlyHint, true);
     }
+    if (tool.name === 'get_product') assert.match(tool.description, /50\u2013499.*\u2265500/);
     if (tool.name === 'check_account') assert.equal(tool.annotations.idempotentHint, true);
     if (tool.name === 'list_transactions') assert.match(tool.description, /get_summary.*Samarkan nomor pelanggan/);
     if (tool.name === 'get_summary') assert.match(tool.description, /list_transactions.*Samarkan nomor pelanggan/);
