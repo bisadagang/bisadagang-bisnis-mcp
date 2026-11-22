@@ -1,0 +1,44 @@
+{
+  "name": "@bisadagang/bisnis-mcp",
+  "version": "0.1.0",
+  "description": "Server MCP stdio untuk API H2H Bisadagang Bisnis",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "bisadagang-bisnis-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "skills"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bisadagang/bisadagang-bisnis-mcp.git"
+  },
+  "homepage": "https://github.com/bisadagang/bisadagang-bisnis-mcp#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
+    "typecheck": "tsc --noEmit",
+    "pretest": "npm run build",
+    "test": "node --test",
+    "generate:types": "openapi-typescript openapi/openapi.json -o src/api-types.ts",
+    "sync:spec": "node scripts/sync-openapi.mjs && npm run generate:types",
+    "check:spec": "node scripts/sync-openapi.mjs --check && npm run generate:types && git diff --exit-code -- src/api-types.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "~5.9.3"
+  }
+}
