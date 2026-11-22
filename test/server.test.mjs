@@ -71,16 +71,18 @@ test('MCP advertises read-only and destructive tools and serves docs without cre
   });
   const { tools } = await client.listTools();
   assert.deepEqual(tools.map((tool) => tool.name).sort(), [
-    'create_transaction', 'get_balance', 'get_product', 'get_transaction', 'list_products',
+    'check_account', 'create_transaction', 'get_balance', 'get_product', 'get_transaction', 'list_products',
   ]);
 
   for (const tool of tools) {
     if (tool.name === 'create_transaction') {
       assert.equal(tool.annotations.destructiveHint, true);
       assert.ok(tool.inputSchema.required.includes('confirm'));
+      assert.match(tool.description, /check_account/);
     } else {
       assert.equal(tool.annotations.readOnlyHint, true);
     }
+    if (tool.name === 'check_account') assert.equal(tool.annotations.idempotentHint, true);
   }
 
   const { resources } = await client.listResources();
@@ -152,17 +154,34 @@ test('fixed transactions omit null fields and use the preceding catalog price as
   assert.equal(status.payload.data.status, 'success');
 });
 
-test('open amounts use the catalog fee and require a valid account check', async (t) => {
-  const checkId = '1be4895b-d15e-4c31-81e2-e85da73d092b';
+test('open amounts use the catalog fee and the check_id from a signed account check', async (t) => {
+  const check = {
+    check_id: '1be4895b-d15e-4c31-81e2-e85da73d092b',
+    product_code: 'EWALLET',
+    customer_no: '081234560001',
+    account_name: 'Nama Contoh',
+    expires_at: '2026-11-22T01:30:00Z',
+  };
   const { call, create } = await connect(t, async (url, init) => {
     if (init.method === 'GET') {
       assert.equal(url.pathname + url.search, '/h2h/v1/products?semua=true');
       return catalog(fixed, open);
     }
     const order = JSON.parse(init.body);
+    if (url.pathname === '/h2h/v1/account-check') {
+      assert.equal(init.method, 'POST');
+      assert.deepEqual(order, { product_code: check.product_code, customer_no: check.customer_no });
+      assert.equal(init.headers.get('Content-Type'), 'application/json');
+      assert.equal(init.headers.has('Idempotency-Key'), false);
+      assert.equal(init.headers.get('X-Bisadagang-Signature'), signRequest(
+        sandbox.apiSecret, init.method, url.pathname, init.headers.get('X-Bisadagang-Timestamp'),
+        init.headers.get('X-Bisadagang-Nonce'), init.body,
+      ));
+      return ok(check);
+    }
     assert.equal(order.max_price, 51_500);
     assert.equal(order.amount, 50_000);
-    assert.equal(order.account_check_id, checkId);
+    assert.equal(order.account_check_id, check.check_id);
     return ok({ ref_id: order.ref_id, status: 'pending' });
   });
 
@@ -170,7 +189,37 @@ test('open amounts use the catalog fee and require a valid account check', async
   const lookup = await call('get_product', { product_code: 'ewallet' });
   assert.equal(lookup.payload.data.fee, 1_500);
   assert.equal((await create(input)).payload.error.code, 'ACCOUNT_CHECK_REQUIRED');
-  assert.equal((await create({ ...input, account_check_id: checkId })).payload.data.status, 'pending');
+  const account = await call('check_account', { product_code: ' ewallet ', customer_no: input.customer_no });
+  assert.deepEqual(account.payload, { success: true, data: check, request_id: requestId });
+  const result = await create({ ...input, account_check_id: account.payload.data.check_id });
+  assert.equal(result.payload.data.status, 'pending');
+});
+
+test('check_account rejects invalid destinations before making a request', async (t) => {
+  let requests = 0;
+  const { client } = await connect(t, async () => { requests++; return ok({}); });
+  for (const args of [
+    { product_code: 'EWALLET-1', customer_no: '081234560001' },
+    { product_code: 'EWALLET', customer_no: 81234560001 },
+    { product_code: 'EWALLET', customer_no: '123' },
+    { product_code: 'EWALLET' },
+  ]) {
+    const result = await client.callTool({ name: 'check_account', arguments: args });
+    assert.equal(result.isError, true);
+  }
+  assert.equal(requests, 0);
+});
+
+test('transaction creation uses a longer timeout than account checks and GETs', async (t) => {
+  const timeout = t.mock.method(AbortSignal, 'timeout', () => new AbortController().signal);
+  const { call, create } = await connect(t, async () => ok({}));
+
+  assert.equal((await call('get_balance')).payload.success, true);
+  assert.equal((await call('check_account', { product_code: 'EWALLET', customer_no: '081234560001' }))
+    .payload.success, true);
+  assert.equal((await create({ ...purchase, max_price: 21_500 })).payload.success, true);
+
+  assert.deepEqual(timeout.mock.calls.map(({ arguments: [ms] }) => ms), [10_000, 10_000, 30_000]);
 });
 
 test('production opt-in still requires confirmation and accepts an explicit max_price', async (t) => {

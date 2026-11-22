@@ -56,6 +56,10 @@ export class BisadagangClient {
     return this.request<Schemas['Transaction']>('GET', '/transactions/' + encodeURIComponent(refId));
   }
 
+  checkAccount(destination: Schemas['ProductDestination']) {
+    return this.request<Schemas['AccountCheck']>('POST', '/account-check', destination);
+  }
+
   async createTransaction(input: CreateInput) {
     if (input.confirm !== true) {
       throw new BisadagangError('CONFIRMATION_REQUIRED', 'Minta konfirmasi pengguna sebelum membuat transaksi.');
@@ -102,7 +106,7 @@ export class BisadagangClient {
 
     try {
       const result = await this.request<Schemas['Transaction']>(
-        'POST', '/transactions', order, 'prepaid:' + ref_id,
+        'POST', '/transactions', order, 'prepaid:' + ref_id, 30_000,
       );
       return { ...result, ref_id };
     } catch (error) {
@@ -121,9 +125,15 @@ export class BisadagangClient {
     return this.request<Schemas['Products']>('GET', '/products' + (search ? '?' + search : ''));
   }
 
-  private async request<T>(method: 'GET' | 'POST', endpoint: string, order?: Order, idempotencyKey?: string) {
+  private async request<T>(
+    method: 'GET' | 'POST',
+    endpoint: string,
+    input?: Order | Schemas['ProductDestination'],
+    idempotencyKey?: string,
+    timeoutMs = 10_000,
+  ) {
     const url = new URL(apiBase + endpoint);
-    const body = order === undefined ? undefined : JSON.stringify(order);
+    const body = input === undefined ? undefined : JSON.stringify(input);
     const timestamp = String(Math.floor(Date.now() / 1000));
     const nonce = randomBytes(16).toString('hex');
     const headers = new Headers({
@@ -142,7 +152,7 @@ export class BisadagangClient {
     let payload: (Partial<ApiSuccess<T>> & Parameters<typeof apiError>[0]) | null;
     try {
       response = await this.fetcher(url, {
-        method, headers, body, redirect: 'error', signal: AbortSignal.timeout(10_000),
+        method, headers, body, redirect: 'error', signal: AbortSignal.timeout(timeoutMs),
       });
       payload = await response.json();
     } catch {

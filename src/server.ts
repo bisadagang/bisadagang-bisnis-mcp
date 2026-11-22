@@ -12,6 +12,10 @@ const docsUrl = 'https://bisnis.bisadagang.com/llms-full.txt';
 const readOnly = { readOnlyHint: true, openWorldHint: true };
 
 const productCode = z.string().trim().regex(/^[A-Za-z0-9]{1,20}$/).toUpperCase();
+const productDestination = {
+  product_code: productCode,
+  customer_no: z.string().trim().regex(/^[0-9]{4,20}$/).describe('Nomor tujuan, termasuk nol di depan.'),
+};
 const rupiah = z.number().int().min(1).max(100_000_000);
 
 async function toolResult(run: () => Promise<object>): Promise<CallToolResult> {
@@ -51,19 +55,24 @@ export function createServer(config: Config, fetcher: typeof fetch = fetch): Mcp
     inputSchema: { product_code: productCode },
   }, ({ product_code }) => toolResult(() => client.getProduct(product_code)));
 
+  server.registerTool('check_account', {
+    description: 'Cek nama pemilik rekening atau dompet digital dan dapatkan check_id beserta waktu kedaluwarsanya.',
+    annotations: { ...readOnly, idempotentHint: true },
+    inputSchema: productDestination,
+  }, (destination) => toolResult(() => client.checkAccount(destination)));
+
   server.registerTool('create_transaction', {
     description: [
       'Buat transaksi prabayar Bisadagang dengan referensi unik.',
       'Sebelum memanggil tool ini, tampilkan produk, nomor pelanggan, dan harga total kepada pengguna.',
       'Minta persetujuan eksplisit untuk transaksi ini, lalu kirim confirm: true.',
       'Gunakan harga yang sudah ditampilkan sebagai max_price agar kenaikan harga tidak langsung disetujui.',
-      'Untuk nominal bebas, harga total adalah amount ditambah fee dan diperlukan account_check_id.',
+      'Untuk nominal bebas, harga total adalah amount ditambah fee. Panggil check_account untuk produk dan nomor yang sama, lalu gunakan check_id yang masih berlaku sebagai account_check_id.',
       'Jika hasil tidak pasti, cek get_transaction dengan ref_id sebelum mempertimbangkan transaksi baru.',
     ].join(' '),
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     inputSchema: {
-      product_code: productCode,
-      customer_no: z.string().trim().regex(/^[0-9]{4,20}$/).describe('Nomor tujuan, termasuk nol di depan.'),
+      ...productDestination,
       max_price: rupiah.nullish().describe('Batas harga total dalam rupiah yang telah disetujui pengguna.'),
       amount: rupiah.nullish().describe('Isi hanya untuk produk nominal bebas.'),
       account_check_id: z.uuid().nullish().describe('ID cek nama yang masih berlaku untuk produk nominal bebas.'),
