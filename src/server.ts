@@ -9,6 +9,7 @@ import { BisadagangError, unavailable } from './errors.js';
 
 const { version } = createRequire(import.meta.url)('../package.json') as { version: string };
 const docsUrl = 'https://bisnis.bisadagang.com/llms-full.txt';
+const openApiUrl = 'https://bisnis.bisadagang.com/openapi.json';
 const readOnly = { readOnlyHint: true, openWorldHint: true };
 
 const productCode = z.string().trim().regex(/^[A-Za-z0-9]{1,20}$/).toUpperCase();
@@ -17,6 +18,7 @@ const productDestination = {
   customer_no: z.string().trim().regex(/^[0-9]{4,20}$/).describe('Nomor tujuan, termasuk nol di depan.'),
 };
 const rupiah = z.number().int().min(1).max(100_000_000);
+const refId = z.string().regex(/^[A-Za-z0-9._-]{1,50}$/);
 
 async function toolResult(run: () => Promise<object>): Promise<CallToolResult> {
   try {
@@ -40,10 +42,14 @@ export function createServer(config: Config, fetcher: typeof fetch = fetch): Mcp
   }, () => toolResult(() => client.getBalance()));
 
   server.registerTool('list_products', {
-    description: 'Ambil daftar produk dan harga Mitra Bisnis. Gunakan filter kategori atau status untuk mempersempit hasil.',
+    description: 'Cari produk dan harga Mitra Bisnis. Hasil ringkas memuat total_count sebelum limit diterapkan. Gunakan get_product untuk detail produk.',
     annotations: readOnly,
     inputSchema: {
-      category: z.string().max(100).optional().describe('Kategori produk. Huruf besar dan kecil diperlakukan sama.'),
+      search: z.string().trim().max(100).optional().describe('Bagian dari kode atau nama produk, tanpa membedakan huruf besar dan kecil.'),
+      brand: z.string().trim().max(100).optional().describe('Nama merek lengkap, tanpa membedakan huruf besar dan kecil.'),
+      category: z.string().trim().max(100).optional().describe('Nama kategori lengkap, tanpa membedakan huruf besar dan kecil.'),
+      only_available: z.boolean().optional().describe('Gunakan true untuk hanya menampilkan produk aktif dengan status normal.'),
+      limit: z.number().int().min(1).max(200).default(50).describe('Jumlah maksimum produk yang ditampilkan. Default 50.'),
       status: z.enum(['normal', 'gangguan']).optional(),
       semua: z.boolean().optional().describe('Gunakan true untuk menyertakan produk yang belum aktif.'),
     },
@@ -68,14 +74,17 @@ export function createServer(config: Config, fetcher: typeof fetch = fetch): Mcp
       'Minta persetujuan eksplisit untuk transaksi ini, lalu kirim confirm: true.',
       'Gunakan harga yang sudah ditampilkan sebagai max_price agar kenaikan harga tidak langsung disetujui.',
       'Untuk nominal bebas, harga total adalah amount ditambah fee. Panggil check_account untuk produk dan nomor yang sama, lalu gunakan check_id yang masih berlaku sebagai account_check_id.',
+      'Buat atau pilih ref_id unik sebelum memanggil tool ini. Pada setiap percobaan ulang, gunakan ref_id yang sama dan semua field dengan nilai yang sama.',
+      'Server menurunkan Idempotency-Key dari ref_id sehingga percobaan ulang mengembalikan transaksi yang sama. Jika ref_id dihilangkan, server membuatnya secara otomatis.',
       'Jika hasil tidak pasti, cek get_transaction dengan ref_id sebelum mempertimbangkan transaksi baru.',
     ].join(' '),
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     inputSchema: {
       ...productDestination,
-      max_price: rupiah.nullish().describe('Batas harga total dalam rupiah yang telah disetujui pengguna.'),
-      amount: rupiah.nullish().describe('Isi hanya untuk produk nominal bebas.'),
-      account_check_id: z.uuid().nullish().describe('ID cek nama yang masih berlaku untuk produk nominal bebas.'),
+      ref_id: refId.optional().describe('Referensi unik. Gunakan kembali referensi yang sama untuk percobaan ulang.'),
+      max_price: rupiah.optional().describe('Batas harga total dalam rupiah yang telah disetujui pengguna.'),
+      amount: rupiah.optional().describe('Isi hanya untuk produk nominal bebas.'),
+      account_check_id: z.uuid().optional().describe('ID cek nama yang masih berlaku untuk produk nominal bebas.'),
       confirm: z.boolean().describe('Harus true setelah pengguna menyetujui produk, nomor, dan harga.'),
     },
   }, (input) => toolResult(() => client.createTransaction(input)));
@@ -84,7 +93,7 @@ export function createServer(config: Config, fetcher: typeof fetch = fetch): Mcp
     description: 'Cek status transaksi melalui ref_id. Status akhir adalah success atau failed.',
     annotations: readOnly,
     inputSchema: {
-      ref_id: z.string().regex(/^[A-Za-z0-9._-]{1,50}$/).refine((ref) => ref !== '.' && ref !== '..'),
+      ref_id: refId.refine((ref) => ref !== '.' && ref !== '..'),
     },
   }, ({ ref_id }) => toolResult(() => client.getTransaction(ref_id)));
 
@@ -103,6 +112,25 @@ export function createServer(config: Config, fetcher: typeof fetch = fetch): Mcp
       return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: await response.text() }] };
     } catch {
       throw new McpError(ErrorCode.InternalError, 'Dokumentasi Bisadagang tidak dapat diambil.');
+    }
+  });
+
+  server.registerResource('openapi.json', openApiUrl, {
+    title: 'Spesifikasi OpenAPI Bisadagang Bisnis',
+    description: 'Spesifikasi OpenAPI H2H Bisadagang Bisnis dalam format JSON.',
+    mimeType: 'application/json',
+  }, async (uri) => {
+    try {
+      const response = await fetcher(openApiUrl, {
+        headers: { Accept: 'application/json' },
+        redirect: 'error',
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) throw new Error();
+      const text = JSON.stringify(await response.json(), null, 2);
+      return { contents: [{ uri: uri.href, mimeType: 'application/json', text }] };
+    } catch {
+      throw new McpError(ErrorCode.InternalError, 'Spesifikasi OpenAPI Bisadagang tidak dapat diambil.');
     }
   });
 

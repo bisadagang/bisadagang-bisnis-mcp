@@ -85,12 +85,15 @@ Di Windows, gunakan `command = "cmd.exe"` dan `args = ["/d", "/c", "npx", "-y", 
 
 - `BISADAGANG_ENV` menggunakan `sandbox` secara default. Untuk production, set `BISADAGANG_ENV=production` dengan API key `bdk_live_` dan jalankan dari IP yang terdaftar. Production memakai saldo asli.
 - Pembuatan transaksi di production memerlukan `BISADAGANG_ALLOW_PRODUCTION_TRANSACTIONS=true`. Di kedua environment, agen perlu menampilkan produk, nomor pelanggan, dan harga lalu meminta persetujuan eksplisit sebelum mengirim `confirm: true`.
-- Gunakan `get_product` atau `list_products` untuk melihat harga, lalu kirim harga yang disetujui sebagai `max_price`. Jika `max_price` kosong, server memakai harga yang sudah dilihat dalam sesi yang sama.
+- Gunakan `list_products` untuk mencari bagian dari kode atau nama dengan `search`, atau cocokkan merek dan kategori dengan `brand` dan `category`. Ketiga filter mengabaikan perbedaan huruf besar dan kecil. `only_available: true` hanya menampilkan produk aktif dengan status `normal`. Gunakan `semua: true` untuk menyertakan produk yang belum aktif atau `status` untuk memilih `normal` atau `gangguan`.
+- `list_products` mengembalikan `data.total_count` sebelum pembatasan hasil dan `data.products` dengan field `code`, `name`, `brand`, `category`, `price`, `fee`, `status`, `active`, dan `is_open_amount`. `limit` mengatur jumlah hasil, dengan default 50 dan maksimum 200. Gunakan `get_product` untuk detail lengkap.
+- Kirim harga yang disetujui sebagai `max_price`. Jika field tersebut dihilangkan, server memakai harga yang sudah dilihat dalam sesi yang sama. Hilangkan `max_price`, `amount`, dan `account_check_id` yang tidak digunakan. Ketiga field menolak nilai `null`.
 - Untuk produk nominal bebas, harga total adalah `amount + fee`. Panggil `check_account` dengan `product_code` dan `customer_no` untuk mendapatkan nama pemilik (`account_name`), `check_id`, dan waktu kedaluwarsa (`expires_at`). Gunakan `check_id` yang masih berlaku sebagai `account_check_id` saat membuat transaksi dengan produk dan nomor yang sama.
-- Simpan `ref_id` dari `create_transaction` dan gunakan `get_transaction` untuk mengecek status. Jika hasil permintaan tidak pasti, cek referensi tersebut sebelum mengajukan transaksi baru. Jika harga berubah, minta persetujuan ulang untuk harga terbaru.
+- Buat dan simpan `ref_id` unik sebelum memanggil `create_transaction`. Gunakan 1–50 karakter dari `A–Z`, `a–z`, `0–9`, titik, garis bawah, atau tanda hubung. Jika dihilangkan, server membuat `ref_id` otomatis dan mengembalikannya pada hasil transaksi atau kegagalan pengiriman.
+- Gunakan `get_transaction` dengan `ref_id` saat hasil permintaan tidak pasti. Untuk mengulangi permintaan yang sama, kirim `ref_id` dan semua nilai field yang sama, termasuk `max_price`. Server menurunkan `Idempotency-Key` dari referensi tersebut sehingga percobaan ulang mengembalikan transaksi yang sama. Jika harga berubah, minta persetujuan ulang untuk harga terbaru.
 - Simpan API key dan API secret di environment atau konfigurasi lokal yang terlindungi. Hindari memasukkan kredensial ke riwayat chat atau repositori.
 
-Sumber daya MCP `llms-full.txt` memuat panduan integrasi dan spesifikasi API Bisadagang Bisnis.
+Sumber daya MCP `llms-full.txt` memuat panduan integrasi. Sumber daya `openapi.json` menyajikan spesifikasi OpenAPI Bisadagang Bisnis secara terpisah sebagai JSON berindentasi.
 
 ## Skill Claude Code
 

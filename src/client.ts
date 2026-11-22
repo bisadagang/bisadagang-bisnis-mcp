@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import type { components, operations } from './api-types.js';
+import type { components } from './api-types.js';
 import type { Config } from './config.js';
 import { apiError, BisadagangError, unavailable } from './errors.js';
 import { signRequest } from './signing.js';
@@ -7,7 +7,15 @@ import { signRequest } from './signing.js';
 const apiBase = 'https://api.bisadagang.com/h2h/v1';
 type Schemas = components['schemas'];
 type Product = Schemas['Product'];
-type ProductFilters = NonNullable<operations['listProducts']['parameters']['query']>;
+interface ProductFilters {
+  search?: string;
+  brand?: string;
+  category?: string;
+  only_available?: boolean;
+  limit: number;
+  status?: Product['status'];
+  semua?: boolean;
+}
 type Order = Schemas['CreateTransaction'];
 
 interface ApiSuccess<T> {
@@ -16,10 +24,12 @@ interface ApiSuccess<T> {
   request_id: string | null;
 }
 
-type CreateInput = Pick<Order, 'product_code' | 'customer_no' | 'account_check_id'> & {
+type CreateInput = Pick<Order, 'product_code' | 'customer_no'> & {
   confirm: boolean;
-  max_price?: number | null;
-  amount?: number | null;
+  ref_id?: string;
+  max_price?: number;
+  amount?: number;
+  account_check_id?: string;
 };
 
 export class BisadagangClient {
@@ -35,13 +45,28 @@ export class BisadagangClient {
   }
 
   async listProducts(filters: ProductFilters) {
-    const result = await this.fetchProducts(filters);
-    for (const product of result.data.products) this.products.set(product.code, product);
-    return result;
+    const { success, data, request_id } = await this.fetchProducts(filters.semua);
+    const search = filters.search?.toLowerCase();
+    const brand = filters.brand?.toLowerCase();
+    const category = filters.category?.toLowerCase();
+    const matches = data.products.filter((product) =>
+      (!search || product.code.toLowerCase().includes(search) || product.product_name.toLowerCase().includes(search))
+      && (brand === undefined || product.brand.toLowerCase() === brand)
+      && (category === undefined || product.category.toLowerCase() === category)
+      && (filters.status === undefined || product.status === filters.status)
+      && (!filters.only_available || (product.active && product.status === 'normal')),
+    );
+    const products = matches.slice(0, filters.limit).map((product) => {
+      this.products.set(product.code, product);
+      const { code, product_name, brand, category, price, fee, status, active, is_open_amount } = product;
+      return { code, name: product_name, brand, category, price, fee, status, active, is_open_amount };
+    });
+
+    return { success, data: { total_count: matches.length, products }, request_id };
   }
 
   async getProduct(productCode: string) {
-    const { data, request_id } = await this.fetchProducts({ semua: true });
+    const { data, request_id } = await this.fetchProducts(true);
     const product = data.products.find(({ code }) => code === productCode);
     if (!product) {
       this.products.delete(productCode);
@@ -68,9 +93,7 @@ export class BisadagangClient {
       throw new BisadagangError('PRODUCTION_TRANSACTIONS_DISABLED', 'Transaksi production belum diaktifkan.');
     }
 
-    const { product_code, customer_no } = input;
-    const amount = input.amount ?? undefined;
-    const accountCheckId = input.account_check_id ?? undefined;
+    const { product_code, customer_no, amount, account_check_id: accountCheckId } = input;
     const product = this.products.get(product_code);
 
     if (product?.product_type === 'postpaid') {
@@ -89,7 +112,7 @@ export class BisadagangClient {
     }
 
     let maxPrice = input.max_price ?? product?.price;
-    if (input.max_price == null && product?.is_open_amount && product.fee != null && amount !== undefined) {
+    if (input.max_price === undefined && product?.is_open_amount && product.fee != null && amount !== undefined) {
       maxPrice = amount + product.fee;
     }
     if (maxPrice == null || !Number.isInteger(maxPrice) || maxPrice < 1 || maxPrice > 100_000_000) {
@@ -99,7 +122,7 @@ export class BisadagangClient {
       );
     }
 
-    const ref_id = 'mcp-' + randomUUID();
+    const ref_id = input.ref_id ?? 'mcp-' + randomUUID();
     const order: Order = { product_code, customer_no, ref_id, max_price: maxPrice };
     if (amount !== undefined) order.amount = amount;
     if (accountCheckId !== undefined) order.account_check_id = accountCheckId;
@@ -116,13 +139,8 @@ export class BisadagangClient {
     }
   }
 
-  private fetchProducts({ category, status, semua }: ProductFilters) {
-    const query = new URLSearchParams();
-    if (category !== undefined) query.set('category', category);
-    if (status !== undefined) query.set('status', status);
-    if (semua !== undefined) query.set('semua', String(semua));
-    const search = query.toString();
-    return this.request<Schemas['Products']>('GET', '/products' + (search ? '?' + search : ''));
+  private fetchProducts(semua?: boolean) {
+    return this.request<Schemas['Products']>('GET', '/products' + (semua === undefined ? '' : '?semua=' + semua));
   }
 
   private async request<T>(
