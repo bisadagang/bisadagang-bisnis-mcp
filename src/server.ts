@@ -19,6 +19,24 @@ const productDestination = {
 };
 const rupiah = z.number().int().min(1).max(100_000_000);
 const refId = z.string().regex(/^[A-Za-z0-9._-]{1,50}$/);
+const dayMs = 86_400_000;
+const wibOffsetMs = 7 * 3_600_000;
+const date = z.iso.date();
+const dateRange = {
+  from: date.optional().describe('Tanggal awal WIB (YYYY-MM-DD). Default enam hari sebelum tanggal akhir.'),
+  to: date.optional().describe('Tanggal akhir WIB (YYYY-MM-DD). Default hari ini di WIB.'),
+};
+
+function resolveDateRange(input: { from?: string; to?: string }) {
+  const to = input.to ?? new Date(Date.now() + wibOffsetMs).toISOString().slice(0, 10);
+  const end = Date.parse(to);
+  const from = input.from ?? new Date(end - 6 * dayMs).toISOString().slice(0, 10);
+  const days = (end - Date.parse(from)) / dayMs + 1;
+  if (!date.safeParse(from).success || days < 1 || days > 92) {
+    throw new BisadagangError('VALIDATION_ERROR', 'Rentang tanggal WIB harus mencakup 1 sampai 92 hari.');
+  }
+  return { from, to };
+}
 
 async function toolResult(run: () => Promise<object>): Promise<CallToolResult> {
   try {
@@ -96,6 +114,27 @@ export function createServer(config: Config, fetcher: typeof fetch = fetch): Mcp
       ref_id: refId.refine((ref) => ref !== '.' && ref !== '..'),
     },
   }, ({ ref_id }) => toolResult(() => client.getTransaction(ref_id)));
+
+  server.registerTool('list_transactions', {
+    description: 'Lihat transaksi satu per satu untuk menjawab pertanyaan tentang transaksi tertentu. Gunakan get_summary untuk total atau tren. Rentang tanggal WIB maksimal 92 hari, termasuk tanggal awal dan akhir. Gunakan next_cursor untuk halaman berikutnya dengan filter dan tanggal yang sama. Samarkan nomor pelanggan saat menyajikan hasil.',
+    annotations: readOnly,
+    inputSchema: {
+      ...dateRange,
+      status: z.enum(['pending', 'success', 'failed']).optional(),
+      product_code: productCode.optional(),
+      limit: z.number().int().min(1).max(100).default(50).describe('Jumlah maksimum transaksi per halaman. Default 50.'),
+      cursor: z.string().min(1).optional().describe('Nilai next_cursor dari halaman sebelumnya.'),
+    },
+  }, (filters) => toolResult(() => client.listTransactions({ ...filters, ...resolveDateRange(filters) })));
+
+  server.registerTool('get_summary', {
+    description: 'Utamakan ringkasan ini untuk total, omzet transaksi sukses, tingkat keberhasilan, atau tren per hari atau produk. Gunakan list_transactions untuk rincian transaksi. Rentang tanggal WIB maksimal 92 hari, termasuk tanggal awal dan akhir. Samarkan nomor pelanggan jika merujuk ke rincian transaksi.',
+    annotations: readOnly,
+    inputSchema: {
+      ...dateRange,
+      group_by: z.enum(['day', 'product']).describe('Gunakan day untuk tren harian atau product untuk perbandingan produk.'),
+    },
+  }, ({ group_by, ...dates }) => toolResult(() => client.getSummary({ ...resolveDateRange(dates), group_by })));
 
   server.registerResource('llms-full.txt', docsUrl, {
     title: 'Dokumentasi API Bisadagang Bisnis',

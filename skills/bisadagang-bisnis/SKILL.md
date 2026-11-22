@@ -1,6 +1,6 @@
 ---
 name: bisadagang-bisnis
-description: Integrate the Bisadagang Bisnis H2H PPOB API into a Mitra Bisnis codebase, including request signing, prepaid transactions, status reconciliation, and webhook verification. Use for implementation, code review, or troubleshooting of this integration.
+description: Integrate the Bisadagang Bisnis H2H PPOB API into a Mitra Bisnis codebase, including request signing, prepaid transactions, status reconciliation, transaction analytics, and webhook verification. Use for implementation, code review, or troubleshooting of this integration.
 ---
 
 # Integrate Bisadagang Bisnis
@@ -23,6 +23,12 @@ Read the [OpenAPI contract](https://bisnis.bisadagang.com/openapi.json) for fiel
 - Persist a unique `ref_id`, the serialized body, and a stable `Idempotency-Key` before submission. The key is required for prepaid and bill payments. Reuse the same key, reference, and exact body bytes for a retry of the same operation, and re-sign with a fresh timestamp and nonce. Successful responses are cached for 24 hours per Mitra Bisnis and environment. A reused reference with different order fields causes `REF_ID_CONFLICT`.
 - On a timeout or uncertain result, check `GET /transactions/{ref_id}` before any new order. Poll `pending` with bounded backoff and honor `Retry-After` on rate limits. Treat `success` and `failed` as terminal statuses. Keep an unresolved transaction pending for reconciliation when the polling window ends. Handle API failures using `error.code` and correlate with `request_id`.
 - For an interactive MCP purchase, show the product, customer number, and total in rupiah and obtain explicit approval before calling `create_transaction` with `confirm: true`. Use the displayed total as `max_price`. Choose and save a unique `ref_id` before the call. The server generates a reference if omitted. On every retry, reuse the same `ref_id` and identical field values so the server derives the same `Idempotency-Key` and returns the same transaction. If the API returns `PRICE_CHANGED`, show the new price and ask for approval again.
+
+## Analyze transactions
+
+- Prefer MCP `get_summary` for totals, successful transaction amount (`totals.success_amount`), success rates, and trends. Use `group_by: "day"` for daily trends and `group_by: "product"` for product comparisons. Use each product's `failed_count` to answer “Produk apa yang paling sering gagal minggu ini?” For “Bandingkan omzet bulan ini dengan bulan lalu,” request a summary for each period and compare `totals.success_amount`.
+- Use MCP `list_transactions` for individual transaction details. Filter by `status` (`pending`, `success`, or `failed`) and `product_code` as needed. The default page size is 50 and the maximum is 100. Pass `data.next_cursor` as `cursor` with the same dates and filters to fetch the next page. Stop when `next_cursor` is null. Mask customer numbers in user-facing results, for example `********0001`.
+- Both tools are read-only. Use inclusive WIB dates in `YYYY-MM-DD` format for `from` and `to`, up to 92 calendar days. An omitted `to` defaults to today in WIB. An omitted `from` defaults to six days before `to`. Pass explicit dates when comparing periods or paging through results.
 
 ## Verify webhooks
 

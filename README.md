@@ -95,6 +95,18 @@ Di Windows, gunakan `command = "cmd.exe"` dan `args = ["/d", "/c", "npx", "-y", 
 
 Sumber daya MCP `llms-full.txt` memuat panduan integrasi. Sumber daya `openapi.json` menyajikan spesifikasi OpenAPI Bisadagang Bisnis secara terpisah sebagai JSON berindentasi.
 
+## Analisis transaksi
+
+- Gunakan `get_summary` untuk total, omzet transaksi sukses (`totals.success_amount`), tingkat keberhasilan, dan tren. Pilih `group_by: "day"` untuk tren harian atau `group_by: "product"` untuk membandingkan produk.
+- Gunakan `list_transactions` untuk rincian transaksi. Filter dengan `status` atau `product_code` dan gunakan `data.next_cursor` sebagai `cursor` untuk halaman berikutnya dengan tanggal dan filter yang sama. Setiap halaman memuat maksimal 50 transaksi secara default dan dapat dinaikkan hingga 100. Samarkan nomor pelanggan saat menyajikan hasil, misalnya `********0001`.
+- Kedua tool bersifat baca saja. `from` dan `to` menggunakan tanggal WIB dalam format `YYYY-MM-DD` dengan maksimum 92 hari, termasuk tanggal awal dan akhir. Jika `to` kosong, gunakan hari ini di WIB. Jika `from` kosong, gunakan enam hari sebelum `to`.
+
+Contoh prompt
+
+- “Produk apa yang paling sering gagal minggu ini?”
+- “Bandingkan omzet bulan ini dengan bulan lalu.”
+- “Tampilkan transaksi PLN20 yang masih pending hari ini dan samarkan nomor pelanggan.”
+
 ## Skill Claude Code
 
 Salin folder `skills/bisadagang-bisnis` ke `.claude/skills/` dalam proyek Mitra Bisnis, atau ke `~/.claude/skills/` untuk pemakaian pribadi di semua proyek. Jalankan `/bisadagang-bisnis` di Claude Code dengan permintaan integrasi yang ingin dikerjakan.

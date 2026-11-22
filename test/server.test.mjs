@@ -79,7 +79,8 @@ test('MCP advertises read-only and destructive tools and serves docs without cre
   });
   const { tools } = await client.listTools();
   assert.deepEqual(tools.map((tool) => tool.name).sort(), [
-    'check_account', 'create_transaction', 'get_balance', 'get_product', 'get_transaction', 'list_products',
+    'check_account', 'create_transaction', 'get_balance', 'get_product', 'get_summary', 'get_transaction',
+    'list_products', 'list_transactions',
   ]);
 
   for (const tool of tools) {
@@ -92,6 +93,8 @@ test('MCP advertises read-only and destructive tools and serves docs without cre
       assert.equal(tool.annotations.readOnlyHint, true);
     }
     if (tool.name === 'check_account') assert.equal(tool.annotations.idempotentHint, true);
+    if (tool.name === 'list_transactions') assert.match(tool.description, /get_summary.*Samarkan nomor pelanggan/);
+    if (tool.name === 'get_summary') assert.match(tool.description, /list_transactions.*Samarkan nomor pelanggan/);
   }
 
   const { resources } = await client.listResources();
@@ -103,6 +106,93 @@ test('MCP advertises read-only and destructive tools and serves docs without cre
   const openApi = await client.readResource({ uri: 'https://bisnis.bisadagang.com/openapi.json' });
   assert.equal(openApi.contents[0].mimeType, 'application/json');
   assert.equal(openApi.contents[0].text, JSON.stringify(spec, null, 2));
+});
+
+test('list_transactions signs filters and the opaque pagination cursor, and returns transaction details', async (t) => {
+  const transaction = {
+    ref_id: 'order-1', transaction_id: 'trx-1', product_code: 'PLN20', product_name: 'Token Listrik 20.000',
+    customer_no: '081234560001', price: 21_500, status: 'failed', sn: null, message: 'Gagal',
+    created_at: '2026-11-20T02:00:00Z', updated_at: '2026-11-20T02:01:00Z',
+  };
+  const cursor = 'page+/=?&';
+  const first = { transactions: [transaction], next_cursor: cursor };
+  const last = { transactions: [], next_cursor: null };
+  const expectedPath = '/h2h/v1/transactions?from=2026-11-16&to=2026-11-22&status=failed&product_code=PLN20&limit=100';
+  const { call } = await connect(t, async (url, { method, headers, body }) => {
+    const path = url.pathname + url.search;
+    assert.equal(method, 'GET');
+    assert.equal(body, undefined);
+    assert.equal(headers.get('X-Bisadagang-Key'), sandbox.apiKey);
+    assert.equal(headers.get('X-Bisadagang-Signature'), signRequest(
+      sandbox.apiSecret, 'GET', path, headers.get('X-Bisadagang-Timestamp'), headers.get('X-Bisadagang-Nonce'),
+    ));
+    if (url.searchParams.has('cursor')) {
+      assert.equal(path, expectedPath + '&cursor=page%2B%2F%3D%3F%26');
+      return Response.json(last);
+    }
+    assert.equal(path, expectedPath);
+    return Response.json(first);
+  });
+  const filters = { from: '2026-11-16', to: '2026-11-22', status: 'failed', product_code: 'pln20', limit: 100 };
+  const page = (await call('list_transactions', filters)).payload;
+  assert.deepEqual(page, { success: true, data: first, request_id: null });
+  assert.deepEqual((await call('list_transactions', { ...filters, cursor: page.data.next_cursor })).payload.data, last);
+});
+
+test('get_summary signs the grouping and returns totals and breakdown', async (t) => {
+  const data = {
+    from: '2026-07-01', to: '2026-09-30',
+    totals: { count: 4, success_count: 2, failed_count: 1, pending_count: 1, success_rate: 0.5, success_amount: 43_000 },
+    breakdown: [{ key: 'PLN20', label: 'Token Listrik 20.000', count: 4, success_count: 2, failed_count: 1, success_amount: 43_000 }],
+  };
+  const { call } = await connect(t, async (url, { method, headers, body }) => {
+    const path = url.pathname + url.search;
+    assert.equal(path, '/h2h/v1/summary?from=2026-07-01&to=2026-09-30&group_by=product');
+    assert.equal(method, 'GET');
+    assert.equal(body, undefined);
+    assert.equal(headers.get('X-Bisadagang-Signature'), signRequest(
+      sandbox.apiSecret, 'GET', path, headers.get('X-Bisadagang-Timestamp'), headers.get('X-Bisadagang-Nonce'),
+    ));
+    return ok(data);
+  });
+  const result = await call('get_summary', { from: data.from, to: data.to, group_by: 'product' });
+  assert.deepEqual(result.payload, { success: true, data, request_id: requestId });
+});
+
+test('analytics default to seven calendar days in WIB and validate inputs before fetching', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-21T17:00:00Z') });
+  const paths = [];
+  const { client, call } = await connect(t, async (url) => {
+    paths.push(url.pathname + url.search);
+    return url.pathname.endsWith('/summary') ? Response.json({
+      from: url.searchParams.get('from'), to: url.searchParams.get('to'), breakdown: [],
+      totals: { count: 0, success_count: 0, failed_count: 0, pending_count: 0, success_rate: 0, success_amount: 0 },
+    }) : ok({ transactions: [], next_cursor: null });
+  });
+  assert.equal((await call('list_transactions')).payload.success, true);
+  assert.equal((await call('get_summary', { group_by: 'day' })).payload.success, true);
+  assert.equal((await call('list_transactions', { to: '2026-03-01' })).payload.success, true);
+  assert.equal((await call('get_summary', { from: '2026-11-22', group_by: 'day' })).payload.success, true);
+  assert.deepEqual(paths, [
+    '/h2h/v1/transactions?from=2026-11-16&to=2026-11-22&limit=50',
+    '/h2h/v1/summary?from=2026-11-16&to=2026-11-22&group_by=day',
+    '/h2h/v1/transactions?from=2026-02-23&to=2026-03-01&limit=50',
+    '/h2h/v1/summary?from=2026-11-22&to=2026-11-22&group_by=day',
+  ]);
+  for (const [name, args] of [
+    ['list_transactions', { from: '2026-11-23', to: '2026-11-22' }],
+    ['get_summary', { from: '2026-07-01', to: '2026-10-01', group_by: 'day' }],
+    ['list_transactions', { from: '2026-02-29' }],
+    ['list_transactions', { limit: 101 }],
+    ['list_transactions', { limit: 0 }],
+    ['list_transactions', { status: 'normal' }],
+    ['get_summary', { to: '2026-11-22T00:00:00Z', group_by: 'day' }],
+    ['get_summary', { group_by: 'week' }],
+  ]) {
+    const result = await client.callTool({ name, arguments: args });
+    assert.equal(result.isError, true, JSON.stringify(args));
+  }
+  assert.equal(paths.length, 4);
 });
 
 test('list_products filters locally, counts before limiting, and returns compact products', async (t) => {
