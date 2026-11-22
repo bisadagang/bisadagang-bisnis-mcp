@@ -4,6 +4,50 @@
  */
 
 export interface paths {
+    "/transactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Riwayat transaksi
+         * @description Hanya transaksi berbayar milik Mitra Bisnis dan environment API key. Tanda tangani path beserta query persis seperti dikirim. Kedua endpoint berbagi batas tetap 30 request per menit per Mitra Bisnis di semua key dan environment. Urut terbaru berdasarkan waktu lalu ID menurun. Gunakan cursor dengan filter yang sama; next_cursor null pada halaman terakhir.
+         */
+        get: operations["listTransactions"];
+        put?: never;
+        /**
+         * Buat transaksi prabayar
+         * @description Beli produk nominal tetap atau nominal bebas. Untuk nominal bebas, kirim amount dan account_check_id, lalu cek status atau gunakan webhook. Production biasanya mengembalikan pending. Sandbox bisa langsung final. Batas default 300 request per menit per Mitra Bisnis dan environment.
+         */
+        post: operations["createTransaction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ringkasan transaksi
+         * @description Hanya transaksi berbayar milik Mitra Bisnis dan environment API key. Tanda tangani path beserta query persis seperti dikirim. Kedua endpoint berbagi batas tetap 30 request per menit per Mitra Bisnis di semua key dan environment. success_rate adalah persentase sukses dari transaksi final, dibulatkan satu desimal atau null jika tidak ada transaksi final. success_amount adalah jumlah harga transaksi sukses dalam rupiah. Breakdown hanya berisi kelompok dengan data, terurut berdasarkan tanggal atau kode produk.
+         */
+        get: operations["getSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/balance": {
         parameters: {
             query?: never;
@@ -38,26 +82,6 @@ export interface paths {
         get: operations["listProducts"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/transactions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Buat transaksi prabayar
-         * @description Beli produk nominal tetap atau nominal bebas. Untuk nominal bebas, kirim amount dan account_check_id, lalu cek status atau gunakan webhook. Production biasanya mengembalikan pending. Sandbox bisa langsung final. Batas default 300 request per menit per Mitra Bisnis dan environment.
-         */
-        post: operations["createTransaction"];
         delete?: never;
         options?: never;
         head?: never;
@@ -404,16 +428,16 @@ export interface components {
             active: boolean;
             success_rate: number | null;
             speed_seconds: number | null;
-            success_count: number | null;
-            failed_count: number | null;
+            /** @description Transaksi final: rendah <50, sedang 50?499, tinggi ?500; null jika belum dihitung. */
+            sample_size: ("rendah" | "sedang" | "tinggi") | null;
             success_rate_30d: number | null;
             speed_seconds_30d: number | null;
-            success_count_30d: number | null;
-            failed_count_30d: number | null;
+            /** @description Transaksi final: rendah <50, sedang 50?499, tinggi ?500; null jika belum dihitung. */
+            sample_size_30d: ("rendah" | "sedang" | "tinggi") | null;
             success_rate_90d: number | null;
             speed_seconds_90d: number | null;
-            success_count_90d: number | null;
-            failed_count_90d: number | null;
+            /** @description Transaksi final: rendah <50, sedang 50?499, tinggi ?500; null jika belum dihitung. */
+            sample_size_90d: ("rendah" | "sedang" | "tinggi") | null;
         };
         CreateTransaction: {
             /** @description Kode produk. Backend melakukan trim dan mengubah huruf menjadi kapital. */
@@ -437,7 +461,11 @@ export interface components {
             /** @enum {string} */
             status: "pending" | "success" | "failed";
             sn: string | null;
-            message: string | null;
+            /**
+             * @description Hanya untuk tampilan; gunakan status untuk logika integrasi.
+             * @enum {string}
+             */
+            message: "Transaksi berhasil." | "Transaksi sedang diproses." | "Transaksi tidak dapat diproses. Dana dikembalikan." | "Transaksi dibatalkan. Dana dikembalikan ke saldo." | "Batas transaksi untuk tujuan ini telah tercapai." | "Nomor tujuan tidak valid. Periksa dan coba lagi." | "Produk sedang tidak tersedia. Silakan coba lagi nanti." | "Transaksi tidak dapat diproses.";
             /** @enum {string} */
             product_type: "prepaid" | "postpaid";
             /** Format: date-time */
@@ -453,6 +481,54 @@ export interface components {
             amount?: number;
             /** @description Hanya transaksi nominal bebas. */
             account_name?: string;
+        };
+        ReportTransaction: {
+            ref_id: string;
+            transaction_id: string | null;
+            product_code: string;
+            product_name: string;
+            customer_no: string;
+            price: number;
+            /** @enum {string} */
+            status: "pending" | "success" | "failed";
+            sn: string | null;
+            /**
+             * @description Hanya untuk tampilan; gunakan status untuk logika integrasi.
+             * @enum {string}
+             */
+            message: "Transaksi berhasil." | "Transaksi sedang diproses." | "Transaksi tidak dapat diproses. Dana dikembalikan." | "Transaksi dibatalkan. Dana dikembalikan ke saldo." | "Batas transaksi untuk tujuan ini telah tercapai." | "Nomor tujuan tidak valid. Periksa dan coba lagi." | "Produk sedang tidak tersedia. Silakan coba lagi nanti." | "Transaksi tidak dapat diproses.";
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        TransactionHistory: {
+            transactions: components["schemas"]["ReportTransaction"][];
+            next_cursor: string | null;
+        };
+        SummaryTotals: {
+            count: number;
+            success_count: number;
+            failed_count: number;
+            pending_count: number;
+            success_rate: number | null;
+            success_amount: number;
+        };
+        SummaryBucket: {
+            key: string;
+            label: string;
+            count: number;
+            success_count: number;
+            failed_count: number;
+            success_amount: number;
+        };
+        TransactionSummary: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            totals: components["schemas"]["SummaryTotals"];
+            breakdown: components["schemas"]["SummaryBucket"][];
         };
         ProductDestination: {
             /** @description Kode produk. Backend melakukan trim dan mengubah huruf menjadi kapital. */
@@ -472,8 +548,21 @@ export interface components {
             commission: number;
             /** @description Total tagihan dikurangi komisi. */
             price: number;
-            /** @description Rincian dari penyedia. Struktur dan tipe dapat berbeda antar produk. */
-            details: unknown;
+            details: {
+                lembar_tagihan?: number;
+                tarif?: string;
+                daya?: number | string;
+                jumlah_peserta?: number | string;
+                detail?: {
+                    periode?: number | string;
+                    nilai_tagihan?: number | string;
+                    admin?: number | string;
+                    denda?: number | string;
+                    biaya_lain?: number | string;
+                    meter_awal?: number | string;
+                    meter_akhir?: number | string;
+                }[];
+            } | null;
             /** Format: date-time */
             expires_at: string;
         };
@@ -937,49 +1026,21 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    getBalance: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Request berhasil. */
-            200: {
-                headers: {
-                    "X-RateLimit-Limit": components["headers"]["RateLimit"];
-                    "X-RateLimit-Remaining": components["headers"]["RateLimitRemaining"];
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @constant */
-                        success: true;
-                        data: components["schemas"]["Balance"];
-                        request_id: string | null;
-                    };
-                };
-            };
-            400: components["responses"]["Error400"];
-            401: components["responses"]["Error401"];
-            403: components["responses"]["Error403"];
-            415: components["responses"]["Error415"];
-            429: components["responses"]["Error429"];
-            500: components["responses"]["Error500"];
-            503: components["responses"]["Error503"];
-        };
-    };
-    listProducts: {
+    listTransactions: {
         parameters: {
             query?: {
-                /** @description Filter kategori. Huruf besar dan kecil diperlakukan sama. */
-                category?: string;
-                /** @description Filter status produk. */
-                status?: "normal" | "gangguan";
-                /** @description true menampilkan semua produk yang bisa dipilih, termasuk yang belum aktif. */
-                semua?: boolean;
+                /** @description Tanggal awal WIB inklusif. Default enam hari sebelum to. */
+                from?: string;
+                /** @description Tanggal akhir WIB inklusif. Default hari ini. Rentang maksimal 92 hari kalender; retensi dua tahun berlaku. */
+                to?: string;
+                /** @description Filter status. */
+                status?: "pending" | "success" | "failed";
+                /** @description Kode produk; trim dan ubah ke huruf besar. */
+                product_code?: string;
+                /** @description Jumlah per halaman. */
+                limit?: number;
+                /** @description next_cursor dari halaman sebelumnya. */
+                cursor?: string;
             };
             header?: never;
             path?: never;
@@ -998,7 +1059,7 @@ export interface operations {
                     "application/json": {
                         /** @constant */
                         success: true;
-                        data: components["schemas"]["Products"];
+                        data: components["schemas"]["TransactionHistory"];
                         request_id: string | null;
                     };
                 };
@@ -1120,6 +1181,122 @@ export interface operations {
                     };
                 };
             };
+            429: components["responses"]["Error429"];
+            500: components["responses"]["Error500"];
+            503: components["responses"]["Error503"];
+        };
+    };
+    getSummary: {
+        parameters: {
+            query?: {
+                /** @description Tanggal awal WIB inklusif. Default enam hari sebelum to. */
+                from?: string;
+                /** @description Tanggal akhir WIB inklusif. Default hari ini. Rentang maksimal 92 hari kalender; retensi dua tahun berlaku. */
+                to?: string;
+                /** @description Kelompokkan berdasarkan tanggal WIB atau produk. */
+                group_by?: "day" | "product";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Request berhasil. */
+            200: {
+                headers: {
+                    "X-RateLimit-Limit": components["headers"]["RateLimit"];
+                    "X-RateLimit-Remaining": components["headers"]["RateLimitRemaining"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: true;
+                        data: components["schemas"]["TransactionSummary"];
+                        request_id: string | null;
+                    };
+                };
+            };
+            400: components["responses"]["Error400"];
+            401: components["responses"]["Error401"];
+            403: components["responses"]["Error403"];
+            415: components["responses"]["Error415"];
+            429: components["responses"]["Error429"];
+            500: components["responses"]["Error500"];
+            503: components["responses"]["Error503"];
+        };
+    };
+    getBalance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Request berhasil. */
+            200: {
+                headers: {
+                    "X-RateLimit-Limit": components["headers"]["RateLimit"];
+                    "X-RateLimit-Remaining": components["headers"]["RateLimitRemaining"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: true;
+                        data: components["schemas"]["Balance"];
+                        request_id: string | null;
+                    };
+                };
+            };
+            400: components["responses"]["Error400"];
+            401: components["responses"]["Error401"];
+            403: components["responses"]["Error403"];
+            415: components["responses"]["Error415"];
+            429: components["responses"]["Error429"];
+            500: components["responses"]["Error500"];
+            503: components["responses"]["Error503"];
+        };
+    };
+    listProducts: {
+        parameters: {
+            query?: {
+                /** @description Filter kategori. Huruf besar dan kecil diperlakukan sama. */
+                category?: string;
+                /** @description Filter status produk. */
+                status?: "normal" | "gangguan";
+                /** @description true menampilkan semua produk yang bisa dipilih, termasuk yang belum aktif. */
+                semua?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Request berhasil. */
+            200: {
+                headers: {
+                    "X-RateLimit-Limit": components["headers"]["RateLimit"];
+                    "X-RateLimit-Remaining": components["headers"]["RateLimitRemaining"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        success: true;
+                        data: components["schemas"]["Products"];
+                        request_id: string | null;
+                    };
+                };
+            };
+            400: components["responses"]["Error400"];
+            401: components["responses"]["Error401"];
+            403: components["responses"]["Error403"];
+            415: components["responses"]["Error415"];
             429: components["responses"]["Error429"];
             500: components["responses"]["Error500"];
             503: components["responses"]["Error503"];
@@ -1781,7 +1958,11 @@ export interface operations {
                         /** @enum {string} */
                         status: "pending" | "success" | "failed";
                         sn: string | null;
-                        message: string | null;
+                        /**
+                         * @description Hanya untuk tampilan; gunakan status untuk logika integrasi.
+                         * @enum {string}
+                         */
+                        message: "Transaksi berhasil." | "Transaksi sedang diproses." | "Transaksi tidak dapat diproses. Dana dikembalikan." | "Transaksi dibatalkan. Dana dikembalikan ke saldo." | "Batas transaksi untuk tujuan ini telah tercapai." | "Nomor tujuan tidak valid. Periksa dan coba lagi." | "Produk sedang tidak tersedia. Silakan coba lagi nanti." | "Transaksi tidak dapat diproses.";
                     };
                 };
             };
