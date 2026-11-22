@@ -17,6 +17,37 @@ interface ProductFilters {
   semua?: boolean;
 }
 type Order = Schemas['CreateTransaction'];
+type Transaction = Schemas['Transaction'];
+
+interface DateRange {
+  from: string;
+  to: string;
+}
+
+interface TransactionFilters extends DateRange {
+  status?: Transaction['status'];
+  product_code?: string;
+  limit: number;
+  cursor?: string;
+}
+
+interface TransactionPage {
+  transactions: (Pick<Transaction, 'ref_id' | 'transaction_id' | 'product_code' | 'customer_no'
+    | 'price' | 'status' | 'sn' | 'message' | 'created_at'> & { product_name: string; updated_at: string })[];
+  next_cursor: string | null;
+}
+
+interface SummaryCounts {
+  count: number;
+  success_count: number;
+  failed_count: number;
+  success_amount: number;
+}
+
+interface Summary extends DateRange {
+  totals: SummaryCounts & { pending_count: number; success_rate: number };
+  breakdown: (SummaryCounts & { key: string; label: string })[];
+}
 
 interface ApiSuccess<T> {
   success: true;
@@ -81,6 +112,20 @@ export class BisadagangClient {
     return this.request<Schemas['Transaction']>('GET', '/transactions/' + encodeURIComponent(refId));
   }
 
+  listTransactions({ from, to, status, product_code, limit, cursor }: TransactionFilters) {
+    const query = new URLSearchParams({ from, to });
+    if (status !== undefined) query.set('status', status);
+    if (product_code !== undefined) query.set('product_code', product_code);
+    query.set('limit', String(limit));
+    if (cursor !== undefined) query.set('cursor', cursor);
+    return this.getAnalytics<TransactionPage>('/transactions?' + query, 'transactions');
+  }
+
+  getSummary({ from, to, group_by }: DateRange & { group_by: 'day' | 'product' }) {
+    const query = new URLSearchParams({ from, to, group_by });
+    return this.getAnalytics<Summary>('/summary?' + query, 'breakdown');
+  }
+
   checkAccount(destination: Schemas['ProductDestination']) {
     return this.request<Schemas['AccountCheck']>('POST', '/account-check', destination);
   }
@@ -143,12 +188,17 @@ export class BisadagangClient {
     return this.request<Schemas['Products']>('GET', '/products' + (semua === undefined ? '' : '?semua=' + semua));
   }
 
+  private getAnalytics<T>(endpoint: string, rows: keyof T) {
+    return this.request<T>('GET', endpoint, undefined, undefined, undefined, rows);
+  }
+
   private async request<T>(
     method: 'GET' | 'POST',
     endpoint: string,
     input?: Order | Schemas['ProductDestination'],
     idempotencyKey?: string,
     timeoutMs = 10_000,
+    rows?: keyof T,
   ) {
     const url = new URL(apiBase + endpoint);
     const body = input === undefined ? undefined : JSON.stringify(input);
@@ -177,10 +227,16 @@ export class BisadagangClient {
       throw unavailable();
     }
 
-    if (!response.ok || payload?.success !== true || payload.data == null) {
-      throw apiError(payload, response);
+    if (response.ok) {
+      if (payload?.success === true && payload.data != null) {
+        return { success: true, data: payload.data, request_id: payload.request_id ?? null } satisfies ApiSuccess<T>;
+      }
+      // Analytics can return the data object directly. Keep the MCP result envelope consistent.
+      if (rows !== undefined && payload != null && !('success' in Object(payload))
+        && Array.isArray((payload as Partial<T>)[rows])) {
+        return { success: true, data: payload as T, request_id: null } satisfies ApiSuccess<T>;
+      }
     }
-
-    return { success: true, data: payload.data, request_id: payload.request_id ?? null } satisfies ApiSuccess<T>;
+    throw apiError(payload, response);
   }
 }
