@@ -11,7 +11,7 @@ if (!JSON.parse(spec.toString('utf8')).openapi) throw new Error('Dokumen OpenAPI
 
 if (process.argv.includes('--check')) {
   if (!(await readFile(snapshot)).equals(spec)) {
-    throw new Error('Spesifikasi OpenAPI berubah. Jalankan npm run sync:spec dan tinjau perubahannya.');
+    console.log('LIVE_SPEC_BASE64=' + spec.toString('base64')); throw new Error('Spesifikasi OpenAPI berubah. Jalankan npm run sync:spec dan tinjau perubahannya.');
   }
 } else {
   await writeFile(snapshot, spec);
