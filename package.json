@@ -28,7 +28,7 @@
     "typecheck": "tsc --noEmit",
     "pretest": "npm run build",
     "test": "node --test",
-    "generate:types": "node scripts/generate-types.mjs",
+    "generate:types": "openapi-typescript openapi/openapi.json -o src/api-types.ts",
     "sync:spec": "node scripts/sync-openapi.mjs && npm run generate:types",
     "check:spec": "node scripts/sync-openapi.mjs --check && npm run generate:types && git diff --exit-code -- src/api-types.ts"
   },

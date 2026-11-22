@@ -129,7 +129,7 @@ npm run build
 npm run check:spec
 ```
 
-Snapshot OpenAPI mengikuti spesifikasi resmi; generator tipe menerapkan penyesuaian sementara untuk kontrak backend PR #103 sampai dokumentasi web diperbarui. Jika spesifikasi resmi berubah, jalankan `npm run sync:spec` untuk memperbarui snapshot OpenAPI dan tipe TypeScript, lalu tinjau perubahannya.
+Jika spesifikasi resmi berubah, jalankan `npm run sync:spec` untuk memperbarui snapshot OpenAPI dan tipe TypeScript, lalu tinjau perubahannya.
 
 - [Dokumentasi Bisadagang Bisnis](https://bisnis.bisadagang.com/docs)
 - [Panduan integrasi lengkap](https://bisnis.bisadagang.com/llms-full.txt)
