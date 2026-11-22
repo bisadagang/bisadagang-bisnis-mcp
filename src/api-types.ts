@@ -404,16 +404,16 @@ export interface components {
             active: boolean;
             success_rate: number | null;
             speed_seconds: number | null;
-            success_count: number | null;
-            failed_count: number | null;
             success_rate_30d: number | null;
             speed_seconds_30d: number | null;
-            success_count_30d: number | null;
-            failed_count_30d: number | null;
             success_rate_90d: number | null;
             speed_seconds_90d: number | null;
-            success_count_90d: number | null;
-            failed_count_90d: number | null;
+            /** @description Jumlah transaksi final: rendah <50, sedang 50–499, tinggi >=500; null jika belum dihitung. */
+            sample_size: ("rendah" | "sedang" | "tinggi") | null;
+            /** @description Jumlah transaksi final: rendah <50, sedang 50–499, tinggi >=500; null jika belum dihitung. */
+            sample_size_30d: ("rendah" | "sedang" | "tinggi") | null;
+            /** @description Jumlah transaksi final: rendah <50, sedang 50–499, tinggi >=500; null jika belum dihitung. */
+            sample_size_90d: ("rendah" | "sedang" | "tinggi") | null;
         };
         CreateTransaction: {
             /** @description Kode produk. Backend melakukan trim dan mengubah huruf menjadi kapital. */
@@ -437,6 +437,7 @@ export interface components {
             /** @enum {string} */
             status: "pending" | "success" | "failed";
             sn: string | null;
+            /** @description Teks tampilan tetap; tentukan hasil transaksi berdasarkan status, bukan teks message. */
             message: string | null;
             /** @enum {string} */
             product_type: "prepaid" | "postpaid";
@@ -472,8 +473,22 @@ export interface components {
             commission: number;
             /** @description Total tagihan dikurangi komisi. */
             price: number;
-            /** @description Rincian dari penyedia. Struktur dan tipe dapat berbeda antar produk. */
-            details: unknown;
+            /** @description Rincian tagihan yang tersedia; setiap field bersifat opsional. */
+            details: {
+                lembar_tagihan?: number;
+                tarif?: string;
+                daya?: number | string;
+                jumlah_peserta?: number | string;
+                detail?: {
+                    periode?: number | string;
+                    nilai_tagihan?: number | string;
+                    admin?: number | string;
+                    denda?: number | string;
+                    biaya_lain?: number | string;
+                    meter_awal?: number | string;
+                    meter_akhir?: number | string;
+                }[];
+            } | null;
             /** Format: date-time */
             expires_at: string;
         };

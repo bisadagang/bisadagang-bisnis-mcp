@@ -60,7 +60,7 @@ export function createServer(config: Config, fetcher: typeof fetch = fetch): Mcp
   }, () => toolResult(() => client.getBalance()));
 
   server.registerTool('list_products', {
-    description: 'Cari produk dan harga Mitra Bisnis. Hasil ringkas memuat total_count sebelum limit diterapkan. Gunakan get_product untuk detail produk.',
+    description: 'Cari produk dan harga Mitra Bisnis. Hasil ringkas memuat total_count sebelum limit diterapkan. Gunakan get_product untuk detail produk, termasuk tier sample_size 24 jam, 30 hari, dan 90 hari.',
     annotations: readOnly,
     inputSchema: {
       search: z.string().trim().max(100).optional().describe('Bagian dari kode atau nama produk, tanpa membedakan huruf besar dan kecil.'),
@@ -74,7 +74,7 @@ export function createServer(config: Config, fetcher: typeof fetch = fetch): Mcp
   }, (filters) => toolResult(() => client.listProducts(filters)));
 
   server.registerTool('get_product', {
-    description: 'Cari satu produk berdasarkan kode dan ambil harga atau biaya untuk Mitra Bisnis.',
+    description: 'Cari satu produk berdasarkan kode dan ambil harga, biaya, dan tier sample_size (rendah: <50, sedang: 50?499, tinggi: >=500 transaksi final; null jika belum dihitung).',
     annotations: readOnly,
     inputSchema: { product_code: productCode },
   }, ({ product_code }) => toolResult(() => client.getProduct(product_code)));
@@ -95,6 +95,7 @@ export function createServer(config: Config, fetcher: typeof fetch = fetch): Mcp
       'Buat atau pilih ref_id unik sebelum memanggil tool ini. Pada setiap percobaan ulang, gunakan ref_id yang sama dan semua field dengan nilai yang sama.',
       'Server menurunkan Idempotency-Key dari ref_id sehingga percobaan ulang mengembalikan transaksi yang sama. Jika ref_id dihilangkan, server membuatnya secara otomatis.',
       'Jika hasil tidak pasti, cek get_transaction dengan ref_id sebelum mempertimbangkan transaksi baru.',
+      'Tentukan hasil berdasarkan status, bukan teks message yang hanya untuk tampilan.',
     ].join(' '),
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     inputSchema: {
@@ -108,7 +109,7 @@ export function createServer(config: Config, fetcher: typeof fetch = fetch): Mcp
   }, (input) => toolResult(() => client.createTransaction(input)));
 
   server.registerTool('get_transaction', {
-    description: 'Cek status transaksi melalui ref_id. Status akhir adalah success atau failed.',
+    description: 'Cek status transaksi melalui ref_id. Status akhir adalah success atau failed. Tentukan hasil berdasarkan status, bukan teks message yang hanya untuk tampilan.',
     annotations: readOnly,
     inputSchema: {
       ref_id: refId.refine((ref) => ref !== '.' && ref !== '..'),
@@ -116,7 +117,7 @@ export function createServer(config: Config, fetcher: typeof fetch = fetch): Mcp
   }, ({ ref_id }) => toolResult(() => client.getTransaction(ref_id)));
 
   server.registerTool('list_transactions', {
-    description: 'Lihat transaksi satu per satu untuk menjawab pertanyaan tentang transaksi tertentu. Gunakan get_summary untuk total atau tren. Rentang tanggal WIB maksimal 92 hari, termasuk tanggal awal dan akhir. Gunakan next_cursor untuk halaman berikutnya dengan filter dan tanggal yang sama. Samarkan nomor pelanggan saat menyajikan hasil.',
+    description: 'Lihat transaksi satu per satu untuk menjawab pertanyaan tentang transaksi tertentu. Gunakan get_summary untuk total atau tren. Rentang tanggal WIB maksimal 92 hari, termasuk tanggal awal dan akhir. Gunakan next_cursor untuk halaman berikutnya dengan filter dan tanggal yang sama. Samarkan nomor pelanggan saat menyajikan hasil. Tentukan hasil berdasarkan status, bukan teks message yang hanya untuk tampilan.',
     annotations: readOnly,
     inputSchema: {
       ...dateRange,
