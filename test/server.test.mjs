@@ -17,7 +17,10 @@ const production = {
   BISADAGANG_ENV: 'production',
 };
 const purchase = { product_code: ' pln20 ', customer_no: ' 081234560001 ', confirm: true };
-const fixed = { code: 'PLN20', product_type: 'prepaid', is_open_amount: false, price: 21_500 };
+const fixed = {
+  code: 'PLN20', product_name: 'Token Listrik 20.000', brand: 'PLN', category: 'Listrik',
+  product_type: 'prepaid', is_open_amount: false, price: 21_500, fee: null, status: 'normal', active: true,
+};
 const open = {
   code: 'EWALLET', product_type: 'prepaid', is_open_amount: true, price: null, fee: 1_500,
 };
@@ -64,7 +67,12 @@ test('sandbox is the default and the key prefix must match the environment', () 
 });
 
 test('MCP advertises read-only and destructive tools and serves docs without credentials', async (t) => {
+  const spec = { openapi: '3.1.0', info: { title: 'Bisadagang Bisnis' } };
   const { client } = await connect(t, async (url, init) => {
+    if (String(url) === 'https://bisnis.bisadagang.com/openapi.json') {
+      assert.deepEqual(init.headers, { Accept: 'application/json' });
+      return Response.json(spec);
+    }
     assert.equal(String(url), 'https://bisnis.bisadagang.com/llms-full.txt');
     assert.deepEqual(init.headers, { Accept: 'text/plain' });
     return new Response('# Bisadagang Bisnis');
@@ -79,6 +87,7 @@ test('MCP advertises read-only and destructive tools and serves docs without cre
       assert.equal(tool.annotations.destructiveHint, true);
       assert.ok(tool.inputSchema.required.includes('confirm'));
       assert.match(tool.description, /check_account/);
+      assert.match(tool.description, /Idempotency-Key/);
     } else {
       assert.equal(tool.annotations.readOnlyHint, true);
     }
@@ -86,9 +95,57 @@ test('MCP advertises read-only and destructive tools and serves docs without cre
   }
 
   const { resources } = await client.listResources();
-  assert.equal(resources.length, 1);
-  const { contents } = await client.readResource({ uri: resources[0].uri });
-  assert.equal(contents[0].text, '# Bisadagang Bisnis');
+  assert.deepEqual(resources.map(({ name, mimeType }) => [name, mimeType]).sort(), [
+    ['llms-full.txt', 'text/plain'], ['openapi.json', 'application/json'],
+  ]);
+  const docs = await client.readResource({ uri: 'https://bisnis.bisadagang.com/llms-full.txt' });
+  assert.equal(docs.contents[0].text, '# Bisadagang Bisnis');
+  const openApi = await client.readResource({ uri: 'https://bisnis.bisadagang.com/openapi.json' });
+  assert.equal(openApi.contents[0].mimeType, 'application/json');
+  assert.equal(openApi.contents[0].text, JSON.stringify(spec, null, 2));
+});
+
+test('list_products filters locally, counts before limiting, and returns compact products', async (t) => {
+  const products = Array.from({ length: 205 }, (_, index) => ({ ...fixed, code: 'PLN' + (index + 20) }));
+  const { client, call } = await connect(t, async (url) => {
+    assert.equal(url.pathname, '/h2h/v1/products');
+    assert.ok(url.search === '' || url.search === '?semua=true');
+    return catalog(
+      ...products,
+      { ...fixed, code: 'PLNA', active: false },
+      { ...fixed, code: 'PLNB', status: 'gangguan' },
+      { ...fixed, code: 'PLNC', brand: 'Other' },
+      { ...fixed, code: 'PLND', category: 'Other' },
+    );
+  });
+
+  const defaults = await call('list_products');
+  assert.equal(defaults.payload.data.total_count, 209);
+  assert.equal(defaults.payload.data.products.length, 50);
+  assert.equal((await call('list_products', { limit: 200 })).payload.data.products.length, 200);
+
+  const filters = { brand: 'pln', category: 'lIsTrIk', only_available: true, semua: true };
+  const byName = await call('list_products', { ...filters, search: 'ToKeN', limit: 1 });
+  assert.deepEqual(byName.payload, {
+    success: true,
+    request_id: requestId,
+    data: {
+      total_count: 205,
+      products: [{
+        code: 'PLN20', name: 'Token Listrik 20.000', brand: 'PLN', category: 'Listrik',
+        price: 21_500, fee: null, status: 'normal', active: true, is_open_amount: false,
+      }],
+    },
+  });
+  const byCode = await call('list_products', { ...filters, search: 'pLn20' });
+  assert.equal(byCode.payload.data.total_count, 11);
+  assert.equal(byCode.payload.data.products[0].code, 'PLN20');
+  assert.deepEqual((await call('list_products', { search: 'missing' })).payload.data,
+    { total_count: 0, products: [] });
+  for (const limit of [0, 201, 2.5]) {
+    const result = await client.callTool({ name: 'list_products', arguments: { limit } });
+    assert.equal(result.isError, true);
+  }
 });
 
 test('confirm is required and production is blocked before any request', async (t) => {
@@ -110,7 +167,7 @@ test('confirm is required and production is blocked before any request', async (
   assert.equal(requests, 0);
 });
 
-test('fixed transactions omit null fields and use the preceding catalog price as max_price', async (t) => {
+test('fixed transactions generate references and use the preceding catalog price as max_price', async (t) => {
   const refs = [];
   const nonces = new Set();
   const { call, create } = await connect(t, async (url, init) => {
@@ -128,7 +185,7 @@ test('fixed transactions omit null fields and use the preceding catalog price as
         assert.equal(url.pathname, '/h2h/v1/transactions/' + refs.at(-1));
         return ok({ ref_id: refs.at(-1), status: 'success' });
       }
-      assert.equal(url.pathname + url.search, '/h2h/v1/products?category=Pulsa+%26+Data&status=normal&semua=false');
+      assert.equal(url.pathname + url.search, '/h2h/v1/products?semua=false');
       assert.equal(body, undefined);
       return catalog(fixed);
     }
@@ -143,15 +200,54 @@ test('fixed transactions omit null fields and use the preceding catalog price as
     return ok({ ref_id: order.ref_id, status: 'pending' });
   });
 
-  const lookup = await call('list_products', { category: 'Pulsa & Data', status: 'normal', semua: false });
-  assert.equal(lookup.payload.data.total, 1);
-  const first = await create({ ...purchase, max_price: null, amount: null, account_check_id: null });
+  const lookup = await call('list_products', { category: 'Listrik', status: 'normal', semua: false });
+  assert.equal(lookup.payload.data.total_count, 1);
+  const first = await create(purchase);
   assert.equal(first.payload.ref_id, refs[0]);
   const second = await create(purchase);
   assert.equal(second.payload.ref_id, refs[1]);
   assert.notEqual(first.payload.ref_id, second.payload.ref_id);
   const status = await call('get_transaction', { ref_id: second.payload.ref_id });
   assert.equal(status.payload.data.status, 'success');
+});
+
+test('transaction retries reuse the caller reference, idempotency key, and exact body', async (t) => {
+  const requests = [];
+  const { create } = await connect(t, async (url, init) => {
+    requests.push(init);
+    if (requests.length === 1) throw new Error('Connection lost after submission');
+    return ok({ ref_id: 'Order.123_test-1', transaction_id: 'tx-1', status: 'pending' });
+  });
+  const input = { ...purchase, ref_id: 'Order.123_test-1', max_price: 21_500 };
+  const failed = await create(input);
+  assert.equal(failed.isError, true);
+  assert.equal(failed.payload.ref_id, input.ref_id);
+  const retry = await create(input);
+  assert.equal(retry.payload.ref_id, input.ref_id);
+  assert.equal(retry.payload.data.transaction_id, 'tx-1');
+  assert.equal(requests.length, 2);
+  assert.equal(JSON.parse(requests[0].body).ref_id, input.ref_id);
+  assert.equal(requests[1].body, requests[0].body);
+  for (const { headers } of requests) {
+    assert.equal(headers.get('Idempotency-Key'), 'prepaid:' + input.ref_id);
+  }
+  assert.notEqual(requests[0].headers.get('X-Bisadagang-Nonce'), requests[1].headers.get('X-Bisadagang-Nonce'));
+});
+
+test('transaction schemas reject null and invalid references before making a request', async (t) => {
+  let requests = 0;
+  const { client } = await connect(t, async () => { requests++; return ok({}); });
+  for (const fields of [
+    { max_price: null }, { amount: null }, { account_check_id: null }, { ref_id: null },
+    { ref_id: '' }, { ref_id: 'order/1' }, { ref_id: 'a'.repeat(51) },
+  ]) {
+    const result = await client.callTool({
+      name: 'create_transaction',
+      arguments: { ...purchase, max_price: 21_500, ...fields },
+    });
+    assert.equal(result.isError, true, JSON.stringify(fields));
+  }
+  assert.equal(requests, 0);
 });
 
 test('open amounts use the catalog fee and the check_id from a signed account check', async (t) => {
@@ -235,7 +331,7 @@ test('production opt-in still requires confirmation and accepts an explicit max_
 
   const unconfirmed = await create({ ...purchase, confirm: false, max_price: 20_000 });
   assert.equal(unconfirmed.payload.error.code, 'CONFIRMATION_REQUIRED');
-  const missingPrice = await create({ ...purchase, max_price: null });
+  const missingPrice = await create(purchase);
   assert.equal(missingPrice.payload.error.code, 'MAX_PRICE_REQUIRED');
   assert.equal(requests, 0);
   const result = await create({ ...purchase, max_price: 20_000 });

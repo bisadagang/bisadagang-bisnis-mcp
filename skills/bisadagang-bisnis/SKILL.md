@@ -7,7 +7,7 @@ description: Integrate the Bisadagang Bisnis H2H PPOB API into a Mitra Bisnis co
 
 Use Indonesian for responses, prompts, and error messages addressed to the Mitra Bisnis. Reuse the codebase's HTTP, persistence, and secret-management conventions.
 
-Read the [OpenAPI contract](https://bisnis.bisadagang.com/openapi.json) for fields and error codes, then consult the [integration guide](https://bisnis.bisadagang.com/llms-full.txt) for scenarios and event examples. Use the matching language in the [Bisadagang examples repository](https://github.com/bisadagang/bisadagang-bisnis-examples) as the signing reference. If the MCP server is connected, its `llms-full.txt` resource exposes the same guide.
+Read the [OpenAPI contract](https://bisnis.bisadagang.com/openapi.json) for fields and error codes, then consult the [integration guide](https://bisnis.bisadagang.com/llms-full.txt) for scenarios and event examples. Use the matching language in the [Bisadagang examples repository](https://github.com/bisadagang/bisadagang-bisnis-examples) as the signing reference. If the MCP server is connected, read the `openapi.json` resource for the pretty-printed contract and `llms-full.txt` for the guide.
 
 ## Authenticate
 
@@ -18,10 +18,11 @@ Read the [OpenAPI contract](https://bisnis.bisadagang.com/openapi.json) for fiel
 
 ## Create and reconcile transactions
 
-- Use `POST /transactions` for prepaid products. For open amounts, obtain a current `check_id` from `POST /account-check` for the same product and destination, then send it as `account_check_id` along with `amount`. The total is `amount + fee`. Omit `amount` for fixed-denomination products. Omit unused `max_price` or `amount` fields entirely. Sending either as JSON `null` is invalid.
+- Use MCP `list_products` to find a product by partial code or name with `search`, or by exact `brand` and `category`. Matching is case-insensitive. Set `only_available: true` for active products with `normal` status. The compact product list includes prices and fees, defaults to 50 results, and allows up to 200. `data.total_count` counts matches before the limit. Use `get_product` for full details.
+- Use `POST /transactions` for prepaid products. For open amounts, obtain a current `check_id` from `POST /account-check` for the same product and destination, then send it as `account_check_id` along with `amount`. The total is `amount + fee`. Omit `amount` and `account_check_id` for fixed-denomination products. In MCP, omit any unused `max_price`, `amount`, and `account_check_id` fields. These inputs reject JSON `null`.
 - Persist a unique `ref_id`, the serialized body, and a stable `Idempotency-Key` before submission. The key is required for prepaid and bill payments. Reuse the same key, reference, and exact body bytes for a retry of the same operation, and re-sign with a fresh timestamp and nonce. Successful responses are cached for 24 hours per Mitra Bisnis and environment. A reused reference with different order fields causes `REF_ID_CONFLICT`.
 - On a timeout or uncertain result, check `GET /transactions/{ref_id}` before any new order. Poll `pending` with bounded backoff and honor `Retry-After` on rate limits. Treat `success` and `failed` as terminal statuses. Keep an unresolved transaction pending for reconciliation when the polling window ends. Handle API failures using `error.code` and correlate with `request_id`.
-- For an interactive MCP purchase, show the product, customer number, and total in rupiah and obtain explicit approval before calling `create_transaction` with `confirm: true`. Use the displayed total as `max_price`. If the API returns `PRICE_CHANGED`, show the new price and ask for approval again.
+- For an interactive MCP purchase, show the product, customer number, and total in rupiah and obtain explicit approval before calling `create_transaction` with `confirm: true`. Use the displayed total as `max_price`. Choose and save a unique `ref_id` before the call. The server generates a reference if omitted. On every retry, reuse the same `ref_id` and identical field values so the server derives the same `Idempotency-Key` and returns the same transaction. If the API returns `PRICE_CHANGED`, show the new price and ask for approval again.
 
 ## Verify webhooks
 
