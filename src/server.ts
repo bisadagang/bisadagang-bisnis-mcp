@@ -60,7 +60,7 @@ export function createServer(config: Config, fetcher: typeof fetch = fetch): Mcp
   }, () => toolResult(() => client.getBalance()));
 
   server.registerTool('list_products', {
-    description: 'Cari produk dan harga Mitra Bisnis. Hasil ringkas memuat total_count sebelum limit diterapkan. Gunakan get_product untuk detail produk, termasuk tier sample_size 24 jam, 30 hari, dan 90 hari.',
+    description: 'Cari produk dan harga Mitra Bisnis. Hasil ringkas memuat total_count sebelum limit diterapkan. Gunakan get_product untuk detail produk.',
     annotations: readOnly,
     inputSchema: {
       search: z.string().trim().max(100).optional().describe('Bagian dari kode atau nama produk, tanpa membedakan huruf besar dan kecil.'),
@@ -74,7 +74,7 @@ export function createServer(config: Config, fetcher: typeof fetch = fetch): Mcp
   }, (filters) => toolResult(() => client.listProducts(filters)));
 
   server.registerTool('get_product', {
-    description: 'Cari satu produk berdasarkan kode dan ambil harga, biaya, dan tier sample_size (rendah: <50, sedang: 50–499, tinggi: ≥500 transaksi final; null jika belum dihitung).',
+    description: 'Cari satu produk berdasarkan kode dan ambil harga atau biaya untuk Mitra Bisnis.',
     annotations: readOnly,
     inputSchema: { product_code: productCode },
   }, ({ product_code }) => toolResult(() => client.getProduct(product_code)));

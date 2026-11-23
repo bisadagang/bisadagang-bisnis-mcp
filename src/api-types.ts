@@ -428,16 +428,10 @@ export interface components {
             active: boolean;
             success_rate: number | null;
             speed_seconds: number | null;
-            /** @description Transaksi final: rendah <50, sedang 50–499, tinggi ≥500; null jika belum dihitung. */
-            sample_size: ("rendah" | "sedang" | "tinggi") | null;
             success_rate_30d: number | null;
             speed_seconds_30d: number | null;
-            /** @description Transaksi final: rendah <50, sedang 50–499, tinggi ≥500; null jika belum dihitung. */
-            sample_size_30d: ("rendah" | "sedang" | "tinggi") | null;
             success_rate_90d: number | null;
             speed_seconds_90d: number | null;
-            /** @description Transaksi final: rendah <50, sedang 50–499, tinggi ≥500; null jika belum dihitung. */
-            sample_size_90d: ("rendah" | "sedang" | "tinggi") | null;
         };
         CreateTransaction: {
             /** @description Kode produk. Backend melakukan trim dan mengubah huruf menjadi kapital. */
