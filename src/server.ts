@@ -80,9 +80,12 @@ export function createServer(config: Config, fetcher: typeof fetch = fetch): Mcp
   }, ({ product_code }) => toolResult(() => client.getProduct(product_code)));
 
   server.registerTool('check_account', {
-    description: 'Cek nama pemilik rekening atau dompet digital dan dapatkan check_id beserta waktu kedaluwarsanya.',
+    description: 'Cek nama pemilik rekening, dompet digital, atau akun game (account_name). Gratis tanpa memotong saldo. Cek top-up game bersifat opsional. Gunakan check_id sebagai account_check_id hanya untuk transfer bank nominal bebas, dengan produk dan tujuan yang sama sebelum kedaluwarsa.',
     annotations: { ...readOnly, idempotentHint: true },
-    inputSchema: productDestination,
+    inputSchema: {
+      product_code: productCode.describe('Kode produk transfer bank, e-wallet, atau top-up game yang didukung, misalnya MOBILG10 atau FREEFG10.'),
+      customer_no: productDestination.customer_no.describe('Nomor tujuan dengan format yang sama seperti transaksi. Mobile Legends: user ID langsung diikuti zone ID tanpa pemisah; Free Fire: player ID. Sertakan nol di depan.'),
+    },
   }, (destination) => toolResult(() => client.checkAccount(destination)));
 
   server.registerTool('create_transaction', {
@@ -91,7 +94,7 @@ export function createServer(config: Config, fetcher: typeof fetch = fetch): Mcp
       'Sebelum memanggil tool ini, tampilkan produk, nomor pelanggan, dan harga total kepada pengguna.',
       'Minta persetujuan eksplisit untuk transaksi ini, lalu kirim confirm: true.',
       'Gunakan harga yang sudah ditampilkan sebagai max_price agar kenaikan harga tidak langsung disetujui.',
-      'Untuk nominal bebas, harga total adalah amount ditambah fee. Panggil check_account untuk produk dan nomor yang sama, lalu gunakan check_id yang masih berlaku sebagai account_check_id.',
+      'Untuk transfer bank nominal bebas, harga total adalah amount ditambah fee. Panggil check_account untuk produk dan nomor yang sama, lalu gunakan check_id yang masih berlaku sebagai account_check_id.',
       'Buat atau pilih ref_id unik sebelum memanggil tool ini. Pada setiap percobaan ulang, gunakan ref_id yang sama dan semua field dengan nilai yang sama.',
       'Server menurunkan Idempotency-Key dari ref_id sehingga percobaan ulang mengembalikan transaksi yang sama. Jika ref_id dihilangkan, server membuatnya secara otomatis.',
       'Jika hasil tidak pasti, cek get_transaction dengan ref_id sebelum mempertimbangkan transaksi baru.',
@@ -103,7 +106,7 @@ export function createServer(config: Config, fetcher: typeof fetch = fetch): Mcp
       ref_id: refId.optional().describe('Referensi unik. Gunakan kembali referensi yang sama untuk percobaan ulang.'),
       max_price: rupiah.optional().describe('Batas harga total dalam rupiah yang telah disetujui pengguna.'),
       amount: rupiah.optional().describe('Isi hanya untuk produk nominal bebas.'),
-      account_check_id: z.uuid().optional().describe('ID cek nama yang masih berlaku untuk produk nominal bebas.'),
+      account_check_id: z.uuid().optional().describe('ID cek nama yang masih berlaku, hanya untuk transfer bank nominal bebas.'),
       confirm: z.boolean().describe('Harus true setelah pengguna menyetujui produk, nomor, dan harga.'),
     },
   }, (input) => toolResult(() => client.createTransaction(input)));
