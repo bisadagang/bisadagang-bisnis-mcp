@@ -158,8 +158,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Cek nama rekening atau e-wallet
-         * @description Cek nama gratis. check_id berlaku selama 30 menit untuk produk dan tujuan yang sama. Batas default 60 request per menit per Mitra Bisnis dan environment.
+         * Cek nama rekening, e-wallet, atau akun game
+         * @description Cek nama transfer bank, e-wallet, dan produk top-up game tertentu (Mobile Legends dan Free Fire) gratis tanpa memotong saldo. Untuk game, cek bersifat opsional; account_check_id hanya digunakan untuk transaksi nominal bebas. check_id berlaku 30 menit untuk produk dan tujuan yang sama. Di sandbox, tujuan game berakhiran 0006 menghasilkan ACCOUNT_NOT_FOUND; tujuan game lainnya menghasilkan PELANGGAN SANDBOX. Batas default 60 request per menit per Mitra Bisnis dan environment.
          */
         post: operations["checkAccount"];
         delete?: never;
@@ -524,6 +524,12 @@ export interface components {
             /** @description Nomor tujuan sebagai string. Backend melakukan trim sebelum validasi. */
             customer_no: string;
         };
+        AccountCheckRequest: {
+            /** @description Kode produk transfer bank, e-wallet, atau top-up game yang didukung, misalnya MOBILG10 atau FREEFG10. */
+            product_code: string;
+            /** @description Tujuan 4–20 angka sebagai string, sama dengan transaksi prabayar. Mobile Legends: user ID langsung diikuti zone ID tanpa pemisah; Free Fire: player ID saja. */
+            customer_no: string;
+        };
         BillInquiry: {
             /** Format: uuid */
             inquiry_id: string;
@@ -564,6 +570,7 @@ export interface components {
             check_id: string;
             product_code: string;
             customer_no: string;
+            /** @description Nama pemilik rekening, e-wallet, atau akun game. */
             account_name: string;
             /** Format: date-time */
             expires_at: string;
@@ -1562,7 +1569,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ProductDestination"];
+                "application/json": components["schemas"]["AccountCheckRequest"];
             };
         };
         responses: {
